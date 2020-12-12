@@ -190,17 +190,18 @@ class Avenger:
     #[input] listDestination: A list of the destinations(eg: wooden wall, food, viruss,...)
     #[return] the sorted list of dest
     def sortListDestination(self, listDestination):
-        for i in range(len(listDestination) - 1):
-            isSwapped = False
-            for j in range(len(listDestination) - 1 ):
-                if (self.calculateDistance(listDestination[j]) > self.calculateDistance(listDestination[j+1])):
-                    temp = listDestination[j]
-                    listDestination[j] = listDestination[j+1]
-                    listDestination[j+1] = temp
-                    isSwapped = True
+        # for i in range(len(listDestination) - 1):
+        #     isSwapped = False
+        #     for j in range(len(listDestination) - 1 ):
+        #         if (self.calculateDistance(listDestination[j]) > self.calculateDistance(listDestination[j+1])):
+        #             temp = listDestination[j]
+        #             listDestination[j] = listDestination[j+1]
+        #             listDestination[j+1] = temp
+        #             isSwapped = True
 
-            if(not isSwapped):
-                break
+        #     if(not isSwapped):
+        #         break
+        listDestination.sort(key= self.calculateDistance)
                 
         return listDestination
 
