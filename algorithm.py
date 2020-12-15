@@ -39,16 +39,25 @@ def astarFindPath(maze, start, end):
     # Loop until you find the end
     while len(open_list) > 0:
 
+        ## Get the current node
+        #current_node = open_list[0]
+        #current_index = 0
+        #for index, item in enumerate(open_list):
+        #    if item.f < current_node.f:
+        #        current_node = item
+        #        current_index = index
+
+        ## Pop current off open list, add to closed list
+        #open_list.pop(current_index)
+        #closed_list.append(current_node)
+
+        # ThangPD9 update
         # Get the current node
+        open_list.sort(key=lambda node: node.f )
         current_node = open_list[0]
-        current_index = 0
-        for index, item in enumerate(open_list):
-            if item.f < current_node.f:
-                current_node = item
-                current_index = index
 
         # Pop current off open list, add to closed list
-        open_list.pop(current_index)
+        open_list.pop(0)
         closed_list.append(current_node)
 
         # Found the goal
@@ -68,13 +77,20 @@ def astarFindPath(maze, start, end):
             node_position = (current_node.position[0] + new_position[0], current_node.position[1] + new_position[1])
 
             # Make sure within range
-            if node_position[0] > (len(maze) - 1) or node_position[0] < 0 or node_position[1] > (len(maze[len(maze)-1]) -1) or node_position[1] < 0:
+            #if node_position[0] > (len(maze) - 1) or node_position[0] < 0 or node_position[1] > (len(maze[len(maze)-1]) -1) or node_position[1] < 0:
+            # ThangPD9 update
+            if node_position[0] > (len(maze[0]) - 1) or node_position[0] < 0 or node_position[1] > (len(maze)-1) or node_position[1] < 0:
                 continue
 
+            ## Make sure walkable terrain
+            #if maze[node_position[0]][node_position[1]] != 0:
+            #    continue
+
+            # ThangPD9 update
             # Make sure walkable terrain
-            if maze[node_position[0]][node_position[1]] != 0:
+            if maze[node_position[1]][node_position[0]] != 0:
                 continue
-
+                
             # Create new node
             new_node = Node(current_node, node_position)
 
@@ -110,26 +126,39 @@ def astarFindPath(maze, start, end):
             open_list.append(child)
 
 
-#Just for test
-# def main():
+##Just for test
+#def main():
 
-#     maze = [[0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-#             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-#             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-#             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-#             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-#             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-#             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-#             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-#             [0, 0, 0, 0, 1, 1, 1, 1, 1, 0],
-#             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+#    maze = [[0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+#            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+#            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+#            [0, 0, 0, 0, 1, 0, 0, 1, 0, 0],
+#            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+#            [0, 2, 0, 0, 1, 0, 0, 0, 0, 0],
+#            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+#            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+#            [0, 0, 0, 0, 1, 2, 2, 0, 1, 0],
+#            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
-#     start = (0, 0)
-#     end = (7, 6)
+#    maze1 = [[0, 1, 0],
+#            [0, 1, 0],
+#            [0, 1, 0],
+#            [0, 1, 0],
+#            [0, 0, 0],
+#            [0, 0, 0]]
 
-#     path = astarFindPath(maze, start, end)
-#     print(path)
+#    maze2 = [[0, 0, 0, 0, 0, 0],
+#             [1, 1, 1, 1, 0, 0],
+#             [0, 0, 0, 0, 0, 0]]
+
+#    start = (0, 0)
+#    end = (2, 0)
+#    end2 = (0, 2)
+
+#    path = astarFindPath(maze2, start, end2)
+#    print(path)
+#    pass
 
 
-# if __name__ == '__main__':
-#     main()
+#if __name__ == '__main__':
+#    main()
