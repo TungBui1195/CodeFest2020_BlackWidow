@@ -28,7 +28,7 @@ def main():
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],]
 
-    PathToDest = BlackWidow.astarFindPathWrapper(maze, (1, 1), (16, 4))
+    PathToDest = BlackWidow.astarFindPathWrapper(maze, (1, 1), (1, 14))
     fullDriverStep = BlackWidow.convertPathToStep(PathToDest)
     fullDriverStepWithBomb = BlackWidow.replaceLastMoveRequestByBomb(fullDriverStep)
     t1 = time.time()

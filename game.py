@@ -58,7 +58,17 @@ class Avenger:
     #=======================================Define Methods========================================#
     def __init__(self):
         self.initAvengerInfo()
-        self.initMap()
+        
+    #Description: init Avenger info
+    def initAvengerInfo(self):
+        self.__gameID = '63ee9ff4-40e0-4f82-adef-5ae7c0c6fba7'
+        self.__playerId = 'player1-xxx-xxx-xxx'
+        self.__apiServer = 'https://codefest.techover.io' #Fsoft Server http://10.16.88.98  | Server public internet: https://codefest.techover.io
+
+    # Spawn Avenger
+    def Spawn(self):
+        self.connectToServer()
+        self.bindEvents()
 
     #Description: using SocketIO to connect Server
     def connectToServer(self):
@@ -97,6 +107,11 @@ class Avenger:
         def join_game_handler(res):
             print('[Socket] join-game responsed' + res)
 
+        # Register drive player event handler
+        @self.sio.on('drive player')
+        def drive_player(res):
+            print("[Socket] drive-player responsed, res: ", res)
+
         # Register ticktack player event handler
         @self.sio.on('ticktack player')
         def ticktack_player_handler(res):
@@ -104,23 +119,121 @@ class Avenger:
             #TODO: State machine
             # Check whenever isSetBomb = true or false => TODO
             #if (không có bom cạnh mình && hết tường gỗ)
-            #   self.isSetBomb = False
-            self.updateGameInfo(res)
+            #   
+            if(len(res.spoils) != 0):
+                self.isSetBomb = False
+            else: 
+                self.isSetBomb = True
 
             if (self.isSetBomb):
                 # Set Bomb to destroy wooden Wall 
                 self.becomeADestroyerWoodenWall(res)
-            #elif()
+            else:
+                self.becomeAGlutton(res)
 
-                # TODO: avoid the bomb after set it 
-                # TODO: Set Bomb to kill enemy 
+            # TODO: avoid the bomb after set it 
+            # TODO: Set Bomb to kill enemy 
+    #==============================================Some State Machine methods==============================================#
+    #Description: become a Avenger who want to destroy all Wooden Walls
+    #[input] res: The respond of the Ticktack-player event   
+    #[return] void
+    def becomeADestroyerWoodenWall(self, res):
+        self.listWoodenWalls = self.getListWoodenWalls(res)
+         # get Coordinate of the Avenger
+        self.avengerCoordinate.x = res.players[self.playerIndex].currentPosition.col
+        self.avengerCoordinate.y = res.players[self.playerIndex].currentPosition.row
+        # Sort list
+        self.sortedListWoodenWalls = self.sortListDestination(self.listWoodenWalls)
+        # Find the best wooden wall to go and get the steps to move of Avenger
+        for i in range(len(self.sortedListWoodenWalls)):
+            self.pathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (self.sortedListWoodenWalls[i].x, self.sortedListWoodenWalls[i].y))
+            if(len(self.pathToDest) < self.goodNumberOfStep):
+                self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
+                break
+            else:
+                self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
+        
+        # Replace last step to wooden Wall by setBombRequest because we only need go to the beside of the wooden Wall to place bomb
+        self.multiMoveRequestWithBomb = self.replaceLastMoveRequestByBomb(self.multiMoveRequest)
+        self.goMultiSteps(self.multiMoveRequestWithBomb) # emit request to server    
 
-        # Register drive player event handler
-        @self.sio.on('drive player')
-        def drive_player(res):
-            print("[Socket] drive-player responsed, res: ", res)
+    #Description: become a Avenger who want to eat anything
+    #[input] res: The respond of the Ticktack-player event   
+    #[return] void
+    def becomeAGlutton(self, res):
+        self.listSpoils = res.getListSpoils(res)
+        # get Coordinate of the Avenger
+        self.avengerCoordinate.x = res.players[self.playerIndex].currentPosition.col
+        self.avengerCoordinate.y = res.players[self.playerIndex].currentPosition.row
+        # get Coordinate of the Enemy
+        self.enemyCoordinate.x = res.players[self.enemyIndex].currentPosition.col
+        self.enemyCoordinate.y = res.players[self.enemyIndex].currentPosition.row
+        # Sort list
+        self.sortedListSpoils = self.sortListDestination(self.listSpoils)
+        # Find the best spoil to go and get the steps to move of Avenger  
+        for i in range(len(self.sortedListSpoils)):
+            self.pathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (self.sortedListSpoils[i].x, self.sortedListSpoils[i].y)) 
+            enemyPathtoDest = self.astarFindPathWrapper(res.map, (self.enemyCoordinate.x, self.enemyCoordinate.y), (self.sortedListSpoils[i].x, self.sortedListSpoils[i].y))
+            
+            if (len(self.pathToDest) <= len(enemyPathtoDest)):
+                self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
+                break
+            else:
+                continue
 
-    #Description: Replace the last move step request by set bomb request
+        # check go to eat Spoil or go to destroy wooden walls
+        if(len(self.multiMoveRequest) == 0):
+            self.becomeADestroyerWoodenWall(res)
+        else:
+            self.goMultiSteps(self.multiMoveRequest) # emit request to server
+
+    
+
+
+        
+
+
+    #==============================================Some Utility methods==============================================#
+    #Description: Convert from a list of tuples(output of A* Algorithm) to a list of Coordinate object
+    #[input] tuplesPath: a list of tuples as a path from the given start to the given end in the given maze
+    #[return] pathToDest: a list of Coordinate object as a path from the given start to the given end in the given maze
+    def convertTuplesToCoordinateObject(self, tuplesPath):
+        pathToDest = []
+
+        for path in tuplesPath:
+            pathToDest.append(Coordinate(path[0], path[1]))
+        return pathToDest
+
+    #Description: wrap astarFindPath to a class method, and convert return from a list of tuples to a list of Coordinate object
+    # [input] mapMatrix: 2D array describing the map get from 'ticktack player' event
+    # [input] start: a tupple have Coordinate of start point
+    # [input] end: a tupple have Coordinate of end point
+    def astarFindPathWrapper(self, mapMatrix, start, end):
+        tempPathToDest = astarFindPath(mapMatrix, start, end)
+        return self.convertTuplesToCoordinateObject(tempPathToDest)
+
+    #Description: Convert from "Path to destination" to "drive step to destination"
+    #[input] pathToDest: a list of Coordinate object as a path from the given start to the given end in the given maze
+    #[return] fullDriverStep: A string drive steps to destination
+    def convertPathToStep(self, pathToDest):
+        fullDriverStep = ""
+        for Index in range(len(pathToDest)-1):
+            if(pathToDest[Index].x > pathToDest[Index + 1].x):
+                fullDriverStep += self.moveLeftRequest # Move Left
+
+            elif(pathToDest[Index].x < pathToDest[Index + 1].x):
+                fullDriverStep += self.moveRightRequest # Move Right
+
+            elif(pathToDest[Index].y > pathToDest[Index + 1].y):
+                fullDriverStep += self.moveUpRequest # Move Up
+
+            elif(pathToDest[Index].y < pathToDest[Index + 1].y):
+                fullDriverStep += self.moveDownRequest # Move Down
+            else: 
+                pass
+        return fullDriverStep
+
+        #Description: Replace the last move step request by set bomb request
     def replaceLastMoveRequestByBomb(self, inputMultiMoveRequest):
         listMultiMoveRequest = list(inputMultiMoveRequest)
         #listMultiMoveRequest[len(listMultiMoveRequest) - 1] = self.setBombRequest
@@ -128,12 +241,7 @@ class Avenger:
         listMultiMoveRequest[-1] = self.setBombRequest
         return "".join(listMultiMoveRequest)
 
-    # Spawn Avenger
-    def Spawn(self):
-        self.connectToServer()
-        self.bindEvents()
-
-    #Description: emit an go Up event to the server 
+      #Description: emit an go Up event to the server 
     def goUp(self):
         #ThangPD9 update
         moveUpRequest = json.dumps({'direction': self.moveUpRequest})
@@ -157,16 +265,6 @@ class Avenger:
     def goMultiSteps(self, inputMultiMoveRequest):
         self.sio.emit('drive player', { 'direction': inputMultiMoveRequest})
      
-    #TODO: init Map info
-    def initMap(self):
-        pass
-        
-    #Description: init Avenger info
-    def initAvengerInfo(self):
-        self.__gameID = '63ee9ff4-40e0-4f82-adef-5ae7c0c6fba7'
-        self.__playerId = 'player1-xxx-xxx-xxx'
-        self.__apiServer = 'https://codefest.techover.io' #Fsoft Server http://10.16.88.98  | Server public internet: https://codefest.techover.io
-
     #Description: Get list of all Woodden Walls in the map
     #[input] res: The respond of the Ticktack-player event  
     #[return] listWalls: list of all Woodden Walls in the map
@@ -184,6 +282,30 @@ class Avenger:
                 if (mapMatrix[col][row] == self.isWoodenWall):
                     tempListWoodenWalls.append(Coordinate(row,col))
         return tempListWoodenWalls
+
+    #Description: Get array of all spoils in the map and convert they to list
+    #[input] res: The respond of the Ticktack-player event
+    #[return] list of all spoils in the map
+
+    def getListSpoils(self, res):
+        tempListSpoils = []
+        spoilsArray = res.spoils 
+        for spoil in spoilsArray:
+            tempListSpoils.append(Coordinate(spoil.col, spoil.row))  
+
+        return tempListSpoils
+
+     #Description: Get array of all bombs in the map and convert they to list
+    #[input] res: The respond of the Ticktack-player event
+    #[return] list of all bombs in the map
+
+    def getListBomb(self, res):
+        tempListbombs = []
+        bombsArray = res.bombs 
+        for bomb in bombsArray:
+            tempListbombs.append(Coordinate(bomb.cols, bomb.rows))  #ToDo cols or col, row or rows: Recheck when have key
+
+        return tempListbombs
 
     #Description: Find the Closest wooden Wall in the list of all Woodden Walls
     #[input] listWalls: list of all Woodden Walls in the map
@@ -225,100 +347,6 @@ class Avenger:
         listDestination.sort(key = self.calculateDistance)
 
         return listDestination
-
-    #Description: become a Avenger who want to destroy all Wooden Walls
-    #[input] res: The respond of the Ticktack-player event   
-    #[return] void
-    def becomeADestroyerWoodenWall(self, res):
-        self.listWoodenWalls = self.getListWoodenWalls(res)
-         # get Coordinate of the Avenger
-        self.avengerCoordinate.x = res.players[self.playerIndex].currentPosition.col
-        self.avengerCoordinate.y = res.players[self.playerIndex].currentPosition.row
-        # Sort list
-        self.sortedListWoodenWalls = self.sortListDestination(self.listWoodenWalls)
-        # Find the best wooden wall to go and get the steps to move of Avenger
-        for i in range(len(self.sortedListWoodenWalls)):
-            self.pathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (self.sortedListWoodenWalls[i].x, self.sortedListWoodenWalls[i].y))
-            if(len(self.pathToDest) < self.goodNumberOfStep):
-                self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
-                break
-            else:
-                self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
-        
-        # Replace last step to wooden Wall by setBombRequest because we only need go to the beside of the wooden Wall to place bomb
-        self.multiMoveRequestWithBomb = self.replaceLastMoveRequestByBomb(self.multiMoveRequest)
-        self.goMultiSteps(self.multiMoveRequestWithBomb) # emit request to server    
-
-    #Description: become a Avenger who want to eat anything
-    #[input] res: The respond of the Ticktack-player event   
-    #[return] void
-    def becomeAGlutton(self, res):
-        self.listSpoils = res.getListSpoils(res)
-        # get Coordinate of the Avenger
-        self.avengerCoordinate.x = res.players[self.playerIndex].currentPosition.col
-        self.avengerCoordinate.y = res.players[self.playerIndex].currentPosition.row
-        # get Coordinate of the Enemy
-        self.enemyCoordinate.x = res.players[self.enemyIndex].currentPosition.col
-        self.enemyCoordinate.y = res.players[self.enemyIndex].currentPosition.row
-        # Sort list
-        self.sortedListSpoils = self.sortListDestination(self.listSpoils)
-        # Find the best spoil to go and get the steps to move of Avenger  
-        for in in range(len(self.sortedListSpoils)):
-            self.pathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (self.sortedListSpoils[i].x, self.sortedListSpoils[i].y)) 
-            enemyPathtoDest = self.astarFindPathWrapper(res.map, (self.enemyIndex.x, self.enemyIndex.y), (self.sortedListSpoils[i].x, self.sortedListSpoils[i].y)
-
-
-
-    #Description: Get array of all spoils in the map and convert they to list
-    #[input] res: The respond of the Ticktack-player event
-    #[return] list of all spoils in the map
-
-    def getListSpoils(self, res):
-        tempListSpoils = []
-        spoilsArray = res.spoils 
-        for spoil in spoilsArray:
-            tempListSpoils.append(Coordinate(spoil.col, spoil.row)) 
-        
-    return tempListSpoils
-
-    #Description: Convert from a list of tuples(output of A* Algorithm) to a list of Coordinate object
-    #[input] tuplesPath: a list of tuples as a path from the given start to the given end in the given maze
-    #[return] pathToDest: a list of Coordinate object as a path from the given start to the given end in the given maze
-    def convertTuplesToCoordinateObject(self, tuplesPath):
-        pathToDest = []
-
-        for path in tuplesPath:
-            pathToDest.append(Coordinate(path[0], path[1]))
-        return pathToDest
-
-    #Description: wrap astarFindPath to a class method, and convert return from a list of tuples to a list of Coordinate object
-    # [input] mapMatrix: 2D array describing the map get from 'ticktack player' event
-    # [input] start: a tupple have Coordinate of start point
-    # [input] end: a tupple have Coordinate of end point
-    def astarFindPathWrapper(self, mapMatrix, start, end):
-        tempPathToDest = astarFindPath(mapMatrix, start, end)
-        return self.convertTuplesToCoordinateObject(tempPathToDest)
-
-    #Description: Convert from "Path to destination" to "drive step to destination"
-    #[input] pathToDest: a list of Coordinate object as a path from the given start to the given end in the given maze
-    #[return] fullDriverStep: A string drive steps to destination
-    def convertPathToStep(self, pathToDest):
-        fullDriverStep = ""
-        for Index in range(len(pathToDest)-1):
-            if(pathToDest[Index].x > pathToDest[Index + 1].x):
-                fullDriverStep += self.moveLeftRequest # Move Left
-
-            elif(pathToDest[Index].x < pathToDest[Index + 1].x):
-                fullDriverStep += self.moveRightRequest # Move Right
-
-            elif(pathToDest[Index].y > pathToDest[Index + 1].y):
-                fullDriverStep += self.moveUpRequest # Move Up
-
-            elif(pathToDest[Index].y < pathToDest[Index + 1].y):
-                fullDriverStep += self.moveDownRequest # Move Down
-            else: 
-                pass
-        return fullDriverStep
 
 
 
