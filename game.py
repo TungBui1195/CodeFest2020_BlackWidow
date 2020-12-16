@@ -30,6 +30,8 @@ class Avenger:
     sortedListWoodenWalls = []
     listSpoils = []
     sortedListSpoils = []
+    listBombs = []
+    sortedBombs = []
     closetWoodenWall = Coordinate(0,0)
     pathToDest = []
     isSetBomb = True
@@ -52,8 +54,9 @@ class Avenger:
     playerIndex = 1
     enemyIndex = 0
 
-    #
+    # Some standards to implement State Machine
     goodNumberOfStep = 15
+    dangerArea = 2
 
     #=======================================Define Methods========================================#
     def __init__(self):
@@ -117,20 +120,13 @@ class Avenger:
         def ticktack_player_handler(res):
             print('[Socket] ticktack-player responsed, map: ' + res.map)
             #TODO: State machine
-            # Check whenever isSetBomb = true or false => TODO
-            #if (không có bom cạnh mình && hết tường gỗ)
-            #   
-            if(len(res.spoils) != 0):
-                self.isSetBomb = False
-            else: 
-                self.isSetBomb = True
-
-            if (self.isSetBomb):
-                # Set Bomb to destroy wooden Wall 
-                self.becomeADestroyerWoodenWall(res)
-            else:
+            if (len(res.bombs) != 0):
+                self.becomeAProphet(res)
+            elif(len(res.bombs) == 0 and len(res.spoils) != 0):
                 self.becomeAGlutton(res)
-
+            elif(len(res.bombs) == 0 and len(res.spoils) == 0):
+                self.becomeADestroyerWoodenWall(res)
+                
             # TODO: avoid the bomb after set it 
             # TODO: Set Bomb to kill enemy 
     #==============================================Some State Machine methods==============================================#
@@ -145,8 +141,8 @@ class Avenger:
         # Sort list
         self.sortedListWoodenWalls = self.sortListDestination(self.listWoodenWalls)
         # Find the best wooden wall to go and get the steps to move of Avenger
-        for i in range(len(self.sortedListWoodenWalls)):
-            self.pathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (self.sortedListWoodenWalls[i].x, self.sortedListWoodenWalls[i].y))
+        for woodenWall in self.sortedListWoodenWalls:
+            self.pathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (woodenWall.x, woodenWall.y))
             if(len(self.pathToDest) < self.goodNumberOfStep):
                 self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
                 break
@@ -171,9 +167,9 @@ class Avenger:
         # Sort list
         self.sortedListSpoils = self.sortListDestination(self.listSpoils)
         # Find the best spoil to go and get the steps to move of Avenger  
-        for i in range(len(self.sortedListSpoils)):
-            self.pathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (self.sortedListSpoils[i].x, self.sortedListSpoils[i].y)) 
-            enemyPathtoDest = self.astarFindPathWrapper(res.map, (self.enemyCoordinate.x, self.enemyCoordinate.y), (self.sortedListSpoils[i].x, self.sortedListSpoils[i].y))
+        for spoil in self.sortedListSpoils:
+            self.pathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (spoil.x, spoil.y)) 
+            enemyPathtoDest = self.astarFindPathWrapper(res.map, (self.enemyCoordinate.x, self.enemyCoordinate.y), (spoil.x, spoil.y))
             
             if (len(self.pathToDest) <= len(enemyPathtoDest)):
                 self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
@@ -187,13 +183,74 @@ class Avenger:
         else:
             self.goMultiSteps(self.multiMoveRequest) # emit request to server
 
-    
-
+    #Description: become a Avenger who can dodge all the bombs in the map
+    #[input] res: The respond of the Ticktack-player event   
+    #[return] void 
+    def becomeAProphet(self, res):
+        isBesideBomb = False
+        self.listBombs = self.getListBomb(res)
+        # get Coordinate of the Avenger
+        self.avengerCoordinate.x = res.players[self.playerIndex].currentPosition.col
+        self.avengerCoordinate.y = res.players[self.playerIndex].currentPosition.row
+        # Sort list
+        self.sortedListBombs = self.sortListDestination(self.listBombs)
+        # Find the most dangerous bomb to dodge
+        for bomb in self.sortedListBombs:
+            pathToBomb  = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (bomb.x, bomb.y))
+            if (len(pathToBomb)  <= self.dangerArea):
+                self.pathToDest =  self.goToDodgeBombs(res, bomb)
+                self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
+                isBesideBomb = True
+            else:
+                self.convertDangerAreaToStone(res.map, bomb)
 
         
-
+        if(isBesideBomb):
+            self.goMultiSteps(self.multiMoveRequest) # emit request to server
+        else:
+            if (len(res.spoils) != 0):
+                self.becomeAGlutton(res)
+            else:
+                self.becomeADestroyerWoodenWall(res)
 
     #==============================================Some Utility methods==============================================#
+
+    #Description: Get the path to the best coordinate to dodge bombs
+    #[input] res: The respond of the Ticktack-player event
+    #[input] bombCoordinate: The Coordinate of the bomb
+    #[return] : Path to the best coordinate to dodge bombs
+    def goToDodgeBombs(self, res, bombCoordinate):
+        # Create some new fake spoils 
+        listTempSpoils =  [Coordinate(bombCoordinate.x-1,bombCoordinate.y-1),
+                           Coordinate(bombCoordinate.x-1,bombCoordinate.y+1),
+                           Coordinate(bombCoordinate.x+1,bombCoordinate.y+1),
+                           Coordinate(bombCoordinate.x+1,bombCoordinate.y-1),
+                           Coordinate(bombCoordinate.x+self.dangerArea,bombCoordinate.y),
+                           Coordinate(bombCoordinate.x-self.dangerArea,bombCoordinate.y),
+                           Coordinate(bombCoordinate.x,bombCoordinate.y-self.dangerArea),
+                           Coordinate(bombCoordinate.x,bombCoordinate.y-self.dangerArea),
+                           ]
+        for tempSpoil in listTempSpoils:
+            tempPathToDest = self.astarFindPathWrapper(res.map, (self.avengerCoordinate.x, self.avengerCoordinate.y), (tempSpoil.x, tempSpoil.y))
+            if(len(tempPathToDest) <= self.dangerArea + 1):
+                break
+            else:
+                continue
+
+        return tempPathToDest        
+
+    #Description: convert the Danger Area To Stone where can not move to
+    #[input] mapMatrix: 2D array describing the map get from 'ticktack player' event
+    #[input] bombCoordinate: The Coordinate of the bomb
+    #[return] :Void
+    def convertDangerAreaToStone(self, mapMatrix, bombCoordinate):
+        mapMatrix[bombCoordinate.x][bombCoordinate.y] = True
+        mapMatrix[bombCoordinate.x+1][bombCoordinate.y] = True
+        mapMatrix[bombCoordinate.x-1][bombCoordinate.y] = True
+        mapMatrix[bombCoordinate.x][bombCoordinate.y+1] = True
+        mapMatrix[bombCoordinate.x][bombCoordinate.y-1] = True
+
+
     #Description: Convert from a list of tuples(output of A* Algorithm) to a list of Coordinate object
     #[input] tuplesPath: a list of tuples as a path from the given start to the given end in the given maze
     #[return] pathToDest: a list of Coordinate object as a path from the given start to the given end in the given maze
