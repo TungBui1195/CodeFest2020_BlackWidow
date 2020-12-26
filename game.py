@@ -217,7 +217,7 @@ class Avenger:
         else:
             self.goMultiSteps(self.multiMoveRequest[0]) # emit request to server
 
-    #Description: become a Avenger who can dodge all the bombs, human, viruses in the map
+    #Description: become a Avenger who can dodge all the bombs, human, viruses active in the map
     #[input] res: The respond of the Ticktack-player event   
     #[return] void 
     def becomeAProphet(self, res):
@@ -249,12 +249,12 @@ class Avenger:
                 self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
                 isBesideBomb = True
             elif (not (self.isInCoordinateList(self.listDangerArea, Coordinate(self.avengerCoordinate.x, self.avengerCoordinate.y)))) and (len(pathToBomb)  <= self.dangerArea + 2):
-                self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , bomb)
+                self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , bomb, isBomb=True)
                 self.pathToDest =  self.goToDodgeBombs(self.mapMatrix, bomb)
                 self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
                 isBesideBomb = True
             else:
-                self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , bomb)
+                self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , bomb, isBomb=True)
 
         
         if(isBesideBomb and len(self.multiMoveRequest) != 0):
@@ -302,13 +302,13 @@ class Avenger:
             else:  
                 self.isKillEnemy = False
 
-        # convert human area to stone
+        # convert human area to stone to dodge passive
         for human in self.humanArray:
-            self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , Coordinate(human['position']['x'],human['position']['y']))
+            self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , Coordinate(human['position']['x'],human['position']['y']), isBomb=False)
 
-        # convert viruses area to stone
+        # convert viruses area to stone to dodge passive
         for virus in self.virusesArray:
-            self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , Coordinate(virus['position']['x'],virus['position']['y']))
+            self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , Coordinate(virus['position']['x'],virus['position']['y']), isBomb=False)
 
     #Description: Get the path to the best coordinate to dodge bombs
     #[input] mapMatrix: 2D array describing the map get from 'ticktack player' event
@@ -400,11 +400,11 @@ class Avenger:
 
         return  tempFlag
 
-    #Description: convert the Danger Area To Stone where can not move to
+    #Description: convert the Danger Area(bomb, corona area) To Stone where can not move to
     #[input] mapMatrix: 2D array describing the map get from 'ticktack player' event
     #[input] dangerAreaCoordinate: The Coordinate of the Danger Area
     #[return] :MapMatrix after converted
-    def convertDangerAreaToStone(self, mapMatrix, dangerAreaCoordinate): #direction, isBomb):  # Acess to map Matrrix : mapMatrix[row][col] = mapMatrix[y][x]
+    def convertDangerAreaToStone(self, mapMatrix, dangerAreaCoordinate, isBomb): #direction, isBomb):  # Acess to map Matrrix : mapMatrix[row][col] = mapMatrix[y][x]
         
         mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x] = self.isStoneWall
         mapMatrix[dangerAreaCoordinate.y+1][dangerAreaCoordinate.x] = self.isStoneWall
@@ -412,39 +412,47 @@ class Avenger:
         mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+1] = self.isStoneWall
         mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-1] = self.isStoneWall
 
-        if(self.avengerBombPower > 1):
-            for area in range(2, self.avengerBombPower):
+        if isBomb:
+            if(self.avengerBombPower > 1):
+                for area in range(2, self.avengerBombPower):
 
-                if ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
-                    mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
+                    if ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                        mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
 
-                elif ((dangerAreaCoordinate.y > len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
-                    mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
+                    elif ((dangerAreaCoordinate.y > len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                        mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
 
-                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x > len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
-                    mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
+                    elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x > len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                        mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
 
-                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x < area) and  (dangerAreaCoordinate.y >= area)):
-                    mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
+                    elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x < area) and  (dangerAreaCoordinate.y >= area)):
+                        mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
 
-                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y < area)):
-                    mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
-                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
+                    elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y < area)):
+                        mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
+                        mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
 
-                else:
-                    pass
+                    else:
+                        pass
+            else:
+                mapMatrix[dangerAreaCoordinate.y+2][dangerAreaCoordinate.x] = self.isStoneWall
+                mapMatrix[dangerAreaCoordinate.y-2][dangerAreaCoordinate.x] = self.isStoneWall
+                mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+2] = self.isStoneWall
+                mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-2] = self.isStoneWall
 
         return mapMatrix
+
+    
 
     #Description: Get the Danger Area list where can not move to
     #[input] mapMatrix: 2D array describing the map get from 'ticktack player' event
@@ -490,8 +498,6 @@ class Avenger:
                     pass
         
         return listDangerArea
-
-
 
     #Description: Convert from a list of tuples(output of A* Algorithm) to a list of Coordinate object
     #[input] tuplesPath: a list of tuples as a path from the given start to the given end in the given maze
