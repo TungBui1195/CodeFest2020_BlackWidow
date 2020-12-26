@@ -44,6 +44,7 @@ class Avenger:
     bombArray = []
     humanArray = []
     virusesArray = []
+    spoilsArray = []
     listDangerArea = []
 
     #Value in map matrix
@@ -144,13 +145,13 @@ class Avenger:
     #[input] res: The respond of the Ticktack-player event 
     #[return] void
     def stateMachine(self, res):
-        if (len(res['map_info']['bombs']) != 0):
+        if (len(self.bombArray) != 0) or (self.mapMatrix[self.avengerCoordinate.y][self.avengerCoordinate.x] == 1):
             #self.becomeADestroyerWoodenWall(res)
             self.becomeAProphet(res)
-        elif(len(res['map_info']['bombs']) == 0 and len(res['map_info']['spoils']) != 0):
+        elif(len(self.bombArray) == 0 and len(self.spoilsArray) != 0):
             #self.becomeADestroyerWoodenWall(res)
             self.becomeAGlutton(res)
-        elif(len(res['map_info']['bombs']) == 0 and len(res['map_info']['spoils']) == 0):
+        elif(len(self.bombArray) == 0 and len(self.spoilsArray) == 0):
             self.becomeADestroyerWoodenWall(res)
         #TODO
 
@@ -195,7 +196,7 @@ class Avenger:
     #[return] void
     def becomeAGlutton(self, res):
         print("===========BECOME A GLUTTON============")
-        self.listSpoils = self.getListSpoils(res)
+        self.listSpoils = self.getListSpoils(self.spoilsArray)
 
         # Sort list
         self.sortedListSpoils = self.sortListDestination(self.listSpoils)
@@ -216,7 +217,7 @@ class Avenger:
         else:
             self.goMultiSteps(self.multiMoveRequest[0]) # emit request to server
 
-    #Description: become a Avenger who can dodge all the bombs in the map
+    #Description: become a Avenger who can dodge all the bombs, human, viruses in the map
     #[input] res: The respond of the Ticktack-player event   
     #[return] void 
     def becomeAProphet(self, res):
@@ -232,6 +233,10 @@ class Avenger:
         # get Coordinate of the Avenger
         # Sort list
         self.sortedListBombs = self.sortListDestination(self.listBombs)
+        
+        #Check if any human or virus is beside with the avenger, if yes add they to list bombs
+        if(self.mapMatrix[self.avengerCoordinate.y][self.avengerCoordinate.x] == 1):
+            self.sortedListBombs.append(self.avengerCoordinate)
         # Find the most dangerous bomb to dodge
         for bomb in self.sortedListBombs:
 
@@ -255,7 +260,7 @@ class Avenger:
         if(isBesideBomb and len(self.multiMoveRequest) != 0):
             self.goMultiSteps(self.multiMoveRequest[0]) # emit request to server
         elif(not isBesideBomb):
-            if (len(res['map_info']['spoils']) != 0):
+            if (len(self.spoilsArray) != 0):
                 self.becomeAGlutton(res)
             else:
                 self.becomeADestroyerWoodenWall(res)
@@ -272,6 +277,7 @@ class Avenger:
         self.bombArray = res['map_info']['bombs']
         self.humanArray = res['map_info']['human']
         self.virusesArray = res['map_info']['viruses']
+        self.spoilsArray = res['map_info']['spoils']
         self.avengerBombPower = res['map_info']['players'][self.playerIndex]['power']
         # get Coordinate of the Avenger
         self.avengerCoordinate.x = res['map_info']['players'][self.playerIndex]['currentPosition']['col']
@@ -580,12 +586,12 @@ class Avenger:
         return tempListWoodenWalls
 
     #Description: Get array of all spoils in the map and convert they to list
-    #[input] res: The respond of the Ticktack-player event
+    #[input] spoilsArray: The respond spoilsArray of the Ticktack-player event
     #[return] list of all spoils in the map
 
-    def getListSpoils(self, res):
+    def getListSpoils(self, spoilsArray):
         tempListSpoils = []
-        spoilsArray = res['map_info']['spoils'] 
+
         for spoil in spoilsArray:
             tempListSpoils.append(Coordinate(spoil['col'], spoil['row']))  
 
