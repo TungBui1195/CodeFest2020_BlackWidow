@@ -29,6 +29,7 @@ class Avenger:
     timesUpdateGame = 0
     mapRows = 0
     mapCols = 0
+    avengerBombPower = 0
 
     listWoodenWalls = []
     sortedListWoodenWalls = []
@@ -43,6 +44,7 @@ class Avenger:
     bombArray = []
     humanArray = []
     virusesArray = []
+    listDangerArea = []
 
     #Value in map matrix
     isStoneWall = 1
@@ -66,6 +68,7 @@ class Avenger:
     # Some standards to implement State Machine
     goodNumberOfStep = 10
     dangerArea = 2
+    timeToTracking = 200
 
     #=======================================Define Methods========================================#
     def __init__(self):
@@ -73,9 +76,9 @@ class Avenger:
         
     #Description: init Avenger info
     def initAvengerInfo(self):
-        self.__gameID = 'bfdbd4c0-1e31-47ee-ad83-0f6cbbff0cb0'
+        self.__gameID = '5bbc7fee-33cd-40ca-8b5b-9ee26b892b2f'
         self.__playerId = 'player2-xxx'
-        self.__apiServer = 'https://codefest.techover.io' #Fsoft Server http://10.16.88.98  | Server public internet: https://codefest.techover.io
+        self.__apiServer = 'https://codefest.techover.io' #Fsoft Server https://10.16.88.98  | Server public internet: https://codefest.techover.io
 
     # Spawn Avenger
     def Spawn(self):
@@ -231,8 +234,17 @@ class Avenger:
         self.sortedListBombs = self.sortListDestination(self.listBombs)
         # Find the most dangerous bomb to dodge
         for bomb in self.sortedListBombs:
+
             pathToBomb  = self.astarFindPathWrapper(self.mapMatrix, (self.avengerCoordinate.x, self.avengerCoordinate.y), (bomb.x, bomb.y))
-            if (len(pathToBomb)  <= self.dangerArea + 2):
+            self.listDangerArea = self.getListDangerArea(self.mapMatrix, Coordinate(bomb.x, bomb.y))
+
+           # if (len(pathToBomb)  <= self.dangerArea + 1 and self.isInCoordinateList(self.listDangerArea, Coordinate(self.avengerCoordinate.x, self.avengerCoordinate.y))):
+            if (self.isInCoordinateList(self.listDangerArea, Coordinate(self.avengerCoordinate.x, self.avengerCoordinate.y))) :
+                self.pathToDest =  self.goToDodgeBombs(self.mapMatrix, bomb)
+                self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
+                isBesideBomb = True
+            elif (not (self.isInCoordinateList(self.listDangerArea, Coordinate(self.avengerCoordinate.x, self.avengerCoordinate.y)))) and (len(pathToBomb)  <= self.dangerArea + 2):
+                self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , bomb)
                 self.pathToDest =  self.goToDodgeBombs(self.mapMatrix, bomb)
                 self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
                 isBesideBomb = True
@@ -260,6 +272,7 @@ class Avenger:
         self.bombArray = res['map_info']['bombs']
         self.humanArray = res['map_info']['human']
         self.virusesArray = res['map_info']['viruses']
+        self.avengerBombPower = res['map_info']['players'][self.playerIndex]['power']
         # get Coordinate of the Avenger
         self.avengerCoordinate.x = res['map_info']['players'][self.playerIndex]['currentPosition']['col']
         self.avengerCoordinate.y = res['map_info']['players'][self.playerIndex]['currentPosition']['row']
@@ -273,8 +286,10 @@ class Avenger:
         if (self.timesUpdateGame == 0):
             self.referEnemyCoorrdinate = self.enemyCoordinate
         self.timesUpdateGame += 1
-        
-        if (self.timesUpdateGame == 50):
+
+        if (self.timesUpdateGame == self.timeToTracking-1):
+            self.isKillEnemy = False
+        elif (self.timesUpdateGame == self.timeToTracking):
             self.timesUpdateGame = 0
             if (self.enemyCoordinate == self.referEnemyCoorrdinate):
                 self.isKillEnemy = True
@@ -295,34 +310,94 @@ class Avenger:
     #[return] : Path to the best coordinate to dodge bombs
     def goToDodgeBombs(self, mapMatrix, bombCoordinate):
         # Create some new fake spoils 
+        # listTempSpoils = [ 
+        #                    Coordinate(bombCoordinate.x+self.dangerArea + 1,bombCoordinate.y),
+        #                    Coordinate(bombCoordinate.x-self.dangerArea -1,bombCoordinate.y),
+        #                    Coordinate(bombCoordinate.x,bombCoordinate.y+self.dangerArea + 1),
+        #                    Coordinate(bombCoordinate.x,bombCoordinate.y-self.dangerArea -1),
+        #                    Coordinate(bombCoordinate.x+self.dangerArea,bombCoordinate.y),
+        #                    Coordinate(bombCoordinate.x-self.dangerArea,bombCoordinate.y),
+        #                    Coordinate(bombCoordinate.x,bombCoordinate.y+self.dangerArea),
+        #                    Coordinate(bombCoordinate.x,bombCoordinate.y-self.dangerArea),
+        #                    Coordinate(bombCoordinate.x-1,bombCoordinate.y-1),
+        #                    Coordinate(bombCoordinate.x-1,bombCoordinate.y+1),
+        #                    Coordinate(bombCoordinate.x+1,bombCoordinate.y+1),
+        #                    Coordinate(bombCoordinate.x+1,bombCoordinate.y-1),
+        #                  ]
+
         listTempSpoils = [ 
-                           Coordinate(bombCoordinate.x+self.dangerArea + 1,bombCoordinate.y),
-                           Coordinate(bombCoordinate.x-self.dangerArea -1,bombCoordinate.y),
-                           Coordinate(bombCoordinate.x,bombCoordinate.y+self.dangerArea + 1),
-                           Coordinate(bombCoordinate.x,bombCoordinate.y-self.dangerArea -1),
-                           Coordinate(bombCoordinate.x+self.dangerArea,bombCoordinate.y),
-                           Coordinate(bombCoordinate.x-self.dangerArea,bombCoordinate.y),
-                           Coordinate(bombCoordinate.x,bombCoordinate.y+self.dangerArea),
-                           Coordinate(bombCoordinate.x,bombCoordinate.y-self.dangerArea),
+                           Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y+1),
+                           Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y+1),
+                           Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y-1),
+                           Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y-1),
+                           Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y),
+                           Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y),
+                           
+                           Coordinate(bombCoordinate.x+1,bombCoordinate.y+self.avengerBombPower + 2),
+                           Coordinate(bombCoordinate.x+1,bombCoordinate.y-self.avengerBombPower - 2),
+                           Coordinate(bombCoordinate.x-1,bombCoordinate.y+self.avengerBombPower + 2),
+                           Coordinate(bombCoordinate.x-1,bombCoordinate.y-self.avengerBombPower - 2),
+                           Coordinate(bombCoordinate.x,bombCoordinate.y+self.avengerBombPower + 2),
+                           Coordinate(bombCoordinate.x,bombCoordinate.y-self.avengerBombPower - 2),
+
+                           Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y+1),
+                           Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y+1),
+                           Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y-1),
+                           Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y-1),
+                           Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y),
+                           Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y),
+
+                           Coordinate(bombCoordinate.x+1,bombCoordinate.y+self.avengerBombPower + 1),
+                           Coordinate(bombCoordinate.x+1,bombCoordinate.y-self.avengerBombPower - 1),
+                           Coordinate(bombCoordinate.x-1,bombCoordinate.y+self.avengerBombPower + 1),
+                           Coordinate(bombCoordinate.x-1,bombCoordinate.y-self.avengerBombPower - 1),
+                           Coordinate(bombCoordinate.x,bombCoordinate.y+self.avengerBombPower + 1),
+                           Coordinate(bombCoordinate.x,bombCoordinate.y-self.avengerBombPower - 1),
+
                            Coordinate(bombCoordinate.x-1,bombCoordinate.y-1),
                            Coordinate(bombCoordinate.x-1,bombCoordinate.y+1),
                            Coordinate(bombCoordinate.x+1,bombCoordinate.y+1),
                            Coordinate(bombCoordinate.x+1,bombCoordinate.y-1),
                          ]
+        if (self.avengerBombPower > 1):
+            listTempSpoils.append(Coordinate(bombCoordinate.x-1,bombCoordinate.y-self.avengerBombPower))
+            listTempSpoils.append(Coordinate(bombCoordinate.x+1,bombCoordinate.y-self.avengerBombPower))
+            listTempSpoils.append(Coordinate(bombCoordinate.x-1,bombCoordinate.y+self.avengerBombPower))
+            listTempSpoils.append(Coordinate(bombCoordinate.x+1,bombCoordinate.y+self.avengerBombPower))
+            listTempSpoils.append(Coordinate(bombCoordinate.x-self.avengerBombPower,bombCoordinate.y-1))
+            listTempSpoils.append(Coordinate(bombCoordinate.x-self.avengerBombPower,bombCoordinate.y+1))
+            listTempSpoils.append(Coordinate(bombCoordinate.x+self.avengerBombPower,bombCoordinate.y-1))
+            listTempSpoils.append(Coordinate(bombCoordinate.x+self.avengerBombPower,bombCoordinate.y+1))
 
         for tempSpoil in listTempSpoils:
             tempPathToDest = self.astarFindPathWrapper(self.mapMatrix, (self.avengerCoordinate.x, self.avengerCoordinate.y), (tempSpoil.x, tempSpoil.y))
-            if(len(tempPathToDest) <= self.dangerArea + 3 and len(tempPathToDest) !=0):
+            # Update check if enemyCoordinate is in tempPathToDest or not. If yes go to next loop, if no go to break
+            if(len(tempPathToDest) <= self.dangerArea + 3 and len(tempPathToDest) !=0 and self.isInCoordinateList(tempPathToDest, self.enemyCoordinate) != True):
                 break
             else:
                 continue
 
-        return tempPathToDest        
+        return tempPathToDest   
+
+    #Description: Check a Coordinate is in a List Coordinate or not
+    #[input] coordinateList: a List Coordinate
+    #[input] inputCoordinate: a Coordinate to check with coordinateList
+    #[return] True/False
+    def isInCoordinateList(self, coordinateList, inputCoordinate):
+        tempFlag = False
+        for coordinate in  coordinateList:
+            if (coordinate.x ==  inputCoordinate.x) and (coordinate.y == inputCoordinate.y):
+                tempFlag = True
+                break
+            else:
+                tempFlag = False
+
+        return  tempFlag
 
     #Description: convert the Danger Area To Stone where can not move to
     #[input] mapMatrix: 2D array describing the map get from 'ticktack player' event
     #[input] dangerAreaCoordinate: The Coordinate of the Danger Area
-    #[return] :Void
+    #[return] :MapMatrix after converted
     def convertDangerAreaToStone(self, mapMatrix, dangerAreaCoordinate): #direction, isBomb):  # Acess to map Matrrix : mapMatrix[row][col] = mapMatrix[y][x]
         
         mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x] = self.isStoneWall
@@ -330,57 +405,86 @@ class Avenger:
         mapMatrix[dangerAreaCoordinate.y-1][dangerAreaCoordinate.x] = self.isStoneWall
         mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+1] = self.isStoneWall
         mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-1] = self.isStoneWall
-        if ((dangerAreaCoordinate.y <= len(mapMatrix) - 3)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - 3) and (dangerAreaCoordinate.x >= 2) and  (dangerAreaCoordinate.y >= 2)):
-            mapMatrix[dangerAreaCoordinate.y+2][dangerAreaCoordinate.x] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y-2][dangerAreaCoordinate.x] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+2] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-2] = self.isStoneWall
-        elif ((dangerAreaCoordinate.y > len(mapMatrix) - 3)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - 3) and (dangerAreaCoordinate.x >= 2) and  (dangerAreaCoordinate.y >= 2)):
-            mapMatrix[dangerAreaCoordinate.y-2][dangerAreaCoordinate.x] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+2] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-2] = self.isStoneWall
-        elif ((dangerAreaCoordinate.y <= len(mapMatrix) - 3)  and (dangerAreaCoordinate.x > len(mapMatrix[0]) - 3) and (dangerAreaCoordinate.x >= 2) and  (dangerAreaCoordinate.y >= 2)):
-            mapMatrix[dangerAreaCoordinate.y+2][dangerAreaCoordinate.x] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y-2][dangerAreaCoordinate.x] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-2] = self.isStoneWall
-        elif ((dangerAreaCoordinate.y <= len(mapMatrix) - 3)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - 3) and (dangerAreaCoordinate.x < 2) and  (dangerAreaCoordinate.y >= 2)):
-            mapMatrix[dangerAreaCoordinate.y+2][dangerAreaCoordinate.x] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y-2][dangerAreaCoordinate.x] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+2] = self.isStoneWall
-        elif ((dangerAreaCoordinate.y <= len(mapMatrix) - 3)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - 3) and (dangerAreaCoordinate.x >= 2) and  (dangerAreaCoordinate.y < 2)):
-            mapMatrix[dangerAreaCoordinate.y+2][dangerAreaCoordinate.x] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+2] = self.isStoneWall
-            mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-2] = self.isStoneWall
-        else:
-            pass
 
-        # else:
-        #     mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x] = True
-        #     if (direction == 1):
-        #         mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-1] = True
-        #         if (dangerAreaCoordinate.x >= 2):
-        #             mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-2] = True
-            
-        #     elif(direction == 2):
-        #         mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+1] = True
-        #         if(dangerAreaCoordinate.x <= len(mapMatrix[0]) - 2):
-        #             mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+2] = True
+        if(self.avengerBombPower > 1):
+            for area in range(2, self.avengerBombPower):
 
-        #     elif(direction == 3):
-        #         mapMatrix[dangerAreaCoordinate.y-1][dangerAreaCoordinate.x] = True
-        #         if(dangerAreaCoordinate.y >= 2):
-        #             mapMatrix[dangerAreaCoordinate.y-2][dangerAreaCoordinate.x] = True
+                if ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                    mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
 
-        #     elif(direction == 4):
-        #         mapMatrix[dangerAreaCoordinate.y+1][dangerAreaCoordinate.x] = True
-        #         if(dangerAreaCoordinate.y <= len(mapMatrix) - 2):
-        #             mapMatrix[dangerAreaCoordinate.y+2][dangerAreaCoordinate.x] = True
+                elif ((dangerAreaCoordinate.y > len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                    mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
 
-    # moveLeftRequest = "1"
-    #     moveRightRequest = "2"
-    #     moveUpRequest = "3"
-    #     moveDownRequest = "4"
+                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x > len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                    mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
+
+                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x < area) and  (dangerAreaCoordinate.y >= area)):
+                    mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y-area][dangerAreaCoordinate.x] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
+
+                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y < area)):
+                    mapMatrix[dangerAreaCoordinate.y+area][dangerAreaCoordinate.x] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x+area] = self.isStoneWall
+                    mapMatrix[dangerAreaCoordinate.y][dangerAreaCoordinate.x-area] = self.isStoneWall
+
+                else:
+                    pass
+
         return mapMatrix
+
+    #Description: Get the Danger Area list where can not move to
+    #[input] mapMatrix: 2D array describing the map get from 'ticktack player' event
+    #[input] dangerAreaCoordinate: The Coordinate of the Danger Area
+    #[return] :Danger Area list
+    def getListDangerArea(self, mapMatrix, dangerAreaCoordinate):
+        listDangerArea = []
+        listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y))
+        listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y+1))
+        listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y-1))
+        listDangerArea.append(Coordinate(dangerAreaCoordinate.x+1, dangerAreaCoordinate.y))
+        listDangerArea.append(Coordinate(dangerAreaCoordinate.x-1, dangerAreaCoordinate.y))
+
+        if(self.avengerBombPower > 1):
+            for area in range(2, self.avengerBombPower):
+
+                if ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y+area))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y-area))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x+area, dangerAreaCoordinate.y))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x-area, dangerAreaCoordinate.y))
+
+                elif ((dangerAreaCoordinate.y > len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y-area))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x+area, dangerAreaCoordinate.y))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x-area, dangerAreaCoordinate.y))
+
+                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x > len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y >= area)):
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y+area))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x+area, dangerAreaCoordinate.y))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x-area, dangerAreaCoordinate.y))
+                
+                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x < area) and  (dangerAreaCoordinate.y >= area)):
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y+area))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y-area))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x+area, dangerAreaCoordinate.y))
+
+                elif ((dangerAreaCoordinate.y <= len(mapMatrix) - area -1)  and (dangerAreaCoordinate.x <= len(mapMatrix[0]) - area -1) and (dangerAreaCoordinate.x >= area) and  (dangerAreaCoordinate.y < area)):
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x, dangerAreaCoordinate.y+area))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x-area, dangerAreaCoordinate.y))
+                    listDangerArea.append(Coordinate(dangerAreaCoordinate.x+area, dangerAreaCoordinate.y))
+                else:
+                    pass
+        
+        return listDangerArea
+
 
 
     #Description: Convert from a list of tuples(output of A* Algorithm) to a list of Coordinate object
