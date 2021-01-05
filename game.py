@@ -4,6 +4,7 @@
 import socketio
 import json
 from algorithm import astarFindPath
+import time
 #import time
 
 class Coordinate:
@@ -46,6 +47,7 @@ class Avenger:
     virusesArray = []
     spoilsArray = []
     listDangerArea = []
+    amountPillsOfAvenger = 0
 
     #Value in map matrix
     isStoneWall = 1
@@ -63,8 +65,8 @@ class Avenger:
     multiMoveRequestWithBomb = ""
 
     # index of player and enemy in respond of server
-    playerIndex = 1
-    enemyIndex = 0
+    playerIndex = 0
+    enemyIndex = 1
 
     # Some standards to implement State Machine
     goodNumberOfStep = 10
@@ -77,9 +79,9 @@ class Avenger:
         
     #Description: init Avenger info
     def initAvengerInfo(self):
-        self.__gameID = '5bbc7fee-33cd-40ca-8b5b-9ee26b892b2f'
-        self.__playerId = 'player2-xxx'
-        self.__apiServer = 'https://codefest.techover.io' #Fsoft Server https://10.16.88.98  | Server public internet: https://codefest.techover.io
+        self.__gameID = '137cd438-008a-423d-88af-9d371fd86444'
+        self.__playerId = 'player1-xxx'
+        self.__apiServer = 'https://codefest.techover.io' #Fsoft Server https://gst-codefest-test.fsoft.com.vn/  | Server public internet: https://codefest.techover.io 
 
     # Spawn Avenger
     def Spawn(self):
@@ -134,6 +136,7 @@ class Avenger:
             print('[Socket] ticktack-player responsed, map: ')
             # t0 = time.time()
             self.updateGameData(res)
+            #time.sleep(0.15)
             #TODO: State machine
             self.stateMachine(res)
             # t1 = time.time()
@@ -197,6 +200,12 @@ class Avenger:
     def becomeAGlutton(self, res):
         print("===========BECOME A GLUTTON============")
         self.listSpoils = self.getListSpoils(self.spoilsArray)
+        if self.amountPillsOfAvenger != 0:
+            for human in self.humanArray:
+                if human['curedRemainTime'] <= 2:
+                    self.listSpoils.append(Coordinate(human['position']['col'], human['position']['row']))
+            for virus in self.virusesArray:
+                self.listSpoils.append(Coordinate(virus['position']['col'], virus['position']['row']))
 
         # Sort list
         self.sortedListSpoils = self.sortListDestination(self.listSpoils)
@@ -205,14 +214,14 @@ class Avenger:
             self.pathToDest = self.astarFindPathWrapper(self.mapMatrix, (self.avengerCoordinate.x, self.avengerCoordinate.y), (spoil.x, spoil.y)) 
             enemyPathtoDest = self.astarFindPathWrapper(self.mapMatrix, (self.enemyCoordinate.x, self.enemyCoordinate.y), (spoil.x, spoil.y))
             
-            if (len(self.pathToDest) <= len(enemyPathtoDest) or len(enemyPathtoDest) == 0):
+            if len(self.pathToDest) != 0 and self.isInCoordinateList(self.pathToDest, self.enemyCoordinate) != True:
                 self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
                 break
             else:
                 continue
 
         # check go to eat Spoil or go to destroy wooden walls
-        if(len(self.multiMoveRequest) == 0):
+        if(len(self.multiMoveRequest) == 0 or self.multiMoveRequest[0] == 'x'):
             self.becomeADestroyerWoodenWall(res)
         else:
             self.goMultiSteps(self.multiMoveRequest[0]) # emit request to server
@@ -248,7 +257,7 @@ class Avenger:
                 self.pathToDest =  self.goToDodgeBombs(self.mapMatrix, bomb)
                 self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
                 isBesideBomb = True
-            elif (not (self.isInCoordinateList(self.listDangerArea, Coordinate(self.avengerCoordinate.x, self.avengerCoordinate.y)))) and (len(pathToBomb)  <= self.dangerArea + 2):
+            elif (not (self.isInCoordinateList(self.listDangerArea, Coordinate(self.avengerCoordinate.x, self.avengerCoordinate.y)))) and (len(pathToBomb)  <= self.avengerBombPower + 2):
                 self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , bomb, isBomb=True)
                 self.pathToDest =  self.goToDodgeBombs(self.mapMatrix, bomb)
                 self.multiMoveRequest = self.convertPathToStep(self.pathToDest)
@@ -257,7 +266,7 @@ class Avenger:
                 self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , bomb, isBomb=True)
 
         
-        if(isBesideBomb and len(self.multiMoveRequest) != 0):
+        if(isBesideBomb and len(self.multiMoveRequest) != 0 and self.multiMoveRequest[0] != 'x'):
             self.goMultiSteps(self.multiMoveRequest[0]) # emit request to server
         elif(not isBesideBomb):
             if (len(self.spoilsArray) != 0):
@@ -266,6 +275,14 @@ class Avenger:
                 self.becomeADestroyerWoodenWall(res)
 
     #==============================================Some Utility methods==============================================#
+
+    def getPlayerIndex(self, res):
+        for i in range (len(res['map_info']['players'])):
+            if res['map_info']['players'][i]['id'] == self.__playerID:
+                self.playerIndex = i
+            else:
+                self.enemyIndex = i
+
     #Description: Update game data real time + reset some data to default
     #[input] res: The respond of the Ticktack-player event
     #[return] : void
@@ -278,6 +295,10 @@ class Avenger:
         self.humanArray = res['map_info']['human']
         self.virusesArray = res['map_info']['viruses']
         self.spoilsArray = res['map_info']['spoils']
+
+        self.getPlayerIndex(res)
+
+        self.amountPillsOfAvenger = res['map_info']['players'][self.playerIndex]['pill']
         self.avengerBombPower = res['map_info']['players'][self.playerIndex]['power']
         # get Coordinate of the Avenger
         self.avengerCoordinate.x = res['map_info']['players'][self.playerIndex]['currentPosition']['col']
@@ -301,14 +322,18 @@ class Avenger:
                 self.isKillEnemy = True
             else:  
                 self.isKillEnemy = False
+        
+        if self.amountPillsOfAvenger == 0:     
+            # convert human area to stone to dodge passive
+            for human in self.humanArray:
+                if human['infected']:
+                    self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , Coordinate(human['position']['col'],human['position']['row']), isBomb=False)
+                else:
+                    continue
 
-        # convert human area to stone to dodge passive
-        for human in self.humanArray:
-            self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , Coordinate(human['position']['x'],human['position']['y']), isBomb=False)
-
-        # convert viruses area to stone to dodge passive
-        for virus in self.virusesArray:
-            self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , Coordinate(virus['position']['x'],virus['position']['y']), isBomb=False)
+            # convert viruses area to stone to dodge passive
+            for virus in self.virusesArray:
+                self.mapMatrix = self.convertDangerAreaToStone(self.mapMatrix , Coordinate(virus['position']['col'],virus['position']['row']), isBomb=False)
 
     #Description: Get the path to the best coordinate to dodge bombs
     #[input] mapMatrix: 2D array describing the map get from 'ticktack player' event
@@ -316,72 +341,75 @@ class Avenger:
     #[return] : Path to the best coordinate to dodge bombs
     def goToDodgeBombs(self, mapMatrix, bombCoordinate):
         # Create some new fake spoils 
+        listTempSpoils = [ 
+                           Coordinate(bombCoordinate.x-1,bombCoordinate.y-1),
+                           Coordinate(bombCoordinate.x-1,bombCoordinate.y+1),
+                           Coordinate(bombCoordinate.x+1,bombCoordinate.y+1),
+                           Coordinate(bombCoordinate.x+1,bombCoordinate.y-1),
+                        ]
+
+        for i in range(2,5):
+            listTempSpoils.append(Coordinate(bombCoordinate.x-i,bombCoordinate.y-1))
+            listTempSpoils.append(Coordinate(bombCoordinate.x-i,bombCoordinate.y+1))
+            listTempSpoils.append(Coordinate(bombCoordinate.x+i,bombCoordinate.y+1))
+            listTempSpoils.append(Coordinate(bombCoordinate.x+i,bombCoordinate.y-1))
+            listTempSpoils.append(Coordinate(bombCoordinate.x-1,bombCoordinate.y-i))
+            listTempSpoils.append(Coordinate(bombCoordinate.x-1,bombCoordinate.y+i))
+            listTempSpoils.append(Coordinate(bombCoordinate.x+1,bombCoordinate.y+i))
+            listTempSpoils.append(Coordinate(bombCoordinate.x+1,bombCoordinate.y-i))
+
         # listTempSpoils = [ 
-        #                    Coordinate(bombCoordinate.x+self.dangerArea + 1,bombCoordinate.y),
-        #                    Coordinate(bombCoordinate.x-self.dangerArea -1,bombCoordinate.y),
-        #                    Coordinate(bombCoordinate.x,bombCoordinate.y+self.dangerArea + 1),
-        #                    Coordinate(bombCoordinate.x,bombCoordinate.y-self.dangerArea -1),
-        #                    Coordinate(bombCoordinate.x+self.dangerArea,bombCoordinate.y),
-        #                    Coordinate(bombCoordinate.x-self.dangerArea,bombCoordinate.y),
-        #                    Coordinate(bombCoordinate.x,bombCoordinate.y+self.dangerArea),
-        #                    Coordinate(bombCoordinate.x,bombCoordinate.y-self.dangerArea),
+        #                    Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y+1),
+        #                    Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y+1),
+        #                    Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y-1),
+        #                    Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y-1),
+        #                    Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y),
+        #                    Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y),
+                           
+        #                    Coordinate(bombCoordinate.x+1,bombCoordinate.y+self.avengerBombPower + 2),
+        #                    Coordinate(bombCoordinate.x+1,bombCoordinate.y-self.avengerBombPower - 2),
+        #                    Coordinate(bombCoordinate.x-1,bombCoordinate.y+self.avengerBombPower + 2),
+        #                    Coordinate(bombCoordinate.x-1,bombCoordinate.y-self.avengerBombPower - 2),
+        #                    Coordinate(bombCoordinate.x,bombCoordinate.y+self.avengerBombPower + 2),
+        #                    Coordinate(bombCoordinate.x,bombCoordinate.y-self.avengerBombPower - 2),
+
+        #                    Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y+1),
+        #                    Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y+1),
+        #                    Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y-1),
+        #                    Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y-1),
+        #                    Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y),
+        #                    Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y),
+
+        #                    Coordinate(bombCoordinate.x+1,bombCoordinate.y+self.avengerBombPower + 1),
+        #                    Coordinate(bombCoordinate.x+1,bombCoordinate.y-self.avengerBombPower - 1),
+        #                    Coordinate(bombCoordinate.x-1,bombCoordinate.y+self.avengerBombPower + 1),
+        #                    Coordinate(bombCoordinate.x-1,bombCoordinate.y-self.avengerBombPower - 1),
+        #                    Coordinate(bombCoordinate.x,bombCoordinate.y+self.avengerBombPower + 1),
+        #                    Coordinate(bombCoordinate.x,bombCoordinate.y-self.avengerBombPower - 1),
+
         #                    Coordinate(bombCoordinate.x-1,bombCoordinate.y-1),
         #                    Coordinate(bombCoordinate.x-1,bombCoordinate.y+1),
         #                    Coordinate(bombCoordinate.x+1,bombCoordinate.y+1),
         #                    Coordinate(bombCoordinate.x+1,bombCoordinate.y-1),
         #                  ]
-
-        listTempSpoils = [ 
-                           Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y+1),
-                           Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y+1),
-                           Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y-1),
-                           Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y-1),
-                           Coordinate(bombCoordinate.x+self.avengerBombPower + 2,bombCoordinate.y),
-                           Coordinate(bombCoordinate.x-self.avengerBombPower - 2,bombCoordinate.y),
-                           
-                           Coordinate(bombCoordinate.x+1,bombCoordinate.y+self.avengerBombPower + 2),
-                           Coordinate(bombCoordinate.x+1,bombCoordinate.y-self.avengerBombPower - 2),
-                           Coordinate(bombCoordinate.x-1,bombCoordinate.y+self.avengerBombPower + 2),
-                           Coordinate(bombCoordinate.x-1,bombCoordinate.y-self.avengerBombPower - 2),
-                           Coordinate(bombCoordinate.x,bombCoordinate.y+self.avengerBombPower + 2),
-                           Coordinate(bombCoordinate.x,bombCoordinate.y-self.avengerBombPower - 2),
-
-                           Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y+1),
-                           Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y+1),
-                           Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y-1),
-                           Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y-1),
-                           Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y),
-                           Coordinate(bombCoordinate.x-self.avengerBombPower - 1,bombCoordinate.y),
-
-                           Coordinate(bombCoordinate.x+1,bombCoordinate.y+self.avengerBombPower + 1),
-                           Coordinate(bombCoordinate.x+1,bombCoordinate.y-self.avengerBombPower - 1),
-                           Coordinate(bombCoordinate.x-1,bombCoordinate.y+self.avengerBombPower + 1),
-                           Coordinate(bombCoordinate.x-1,bombCoordinate.y-self.avengerBombPower - 1),
-                           Coordinate(bombCoordinate.x,bombCoordinate.y+self.avengerBombPower + 1),
-                           Coordinate(bombCoordinate.x,bombCoordinate.y-self.avengerBombPower - 1),
-
-                           Coordinate(bombCoordinate.x-1,bombCoordinate.y-1),
-                           Coordinate(bombCoordinate.x-1,bombCoordinate.y+1),
-                           Coordinate(bombCoordinate.x+1,bombCoordinate.y+1),
-                           Coordinate(bombCoordinate.x+1,bombCoordinate.y-1),
-                         ]
-        if (self.avengerBombPower > 1):
-            listTempSpoils.append(Coordinate(bombCoordinate.x-1,bombCoordinate.y-self.avengerBombPower))
-            listTempSpoils.append(Coordinate(bombCoordinate.x+1,bombCoordinate.y-self.avengerBombPower))
-            listTempSpoils.append(Coordinate(bombCoordinate.x-1,bombCoordinate.y+self.avengerBombPower))
-            listTempSpoils.append(Coordinate(bombCoordinate.x+1,bombCoordinate.y+self.avengerBombPower))
-            listTempSpoils.append(Coordinate(bombCoordinate.x-self.avengerBombPower,bombCoordinate.y-1))
-            listTempSpoils.append(Coordinate(bombCoordinate.x-self.avengerBombPower,bombCoordinate.y+1))
-            listTempSpoils.append(Coordinate(bombCoordinate.x+self.avengerBombPower,bombCoordinate.y-1))
-            listTempSpoils.append(Coordinate(bombCoordinate.x+self.avengerBombPower,bombCoordinate.y+1))
+        if (self.avengerBombPower > 1 and self.avengerBombPower < 4):
+            listTempSpoils.append(Coordinate(bombCoordinate.x+self.avengerBombPower + 1,bombCoordinate.y))
+            listTempSpoils.append(Coordinate(bombCoordinate.x-self.avengerBombPower -1,bombCoordinate.y))
+            listTempSpoils.append(Coordinate(bombCoordinate.x,bombCoordinate.y+self.avengerBombPower + 1))
+            listTempSpoils.append(Coordinate(bombCoordinate.x,bombCoordinate.y-self.avengerBombPower -1))
+          
 
         for tempSpoil in listTempSpoils:
-            tempPathToDest = self.astarFindPathWrapper(self.mapMatrix, (self.avengerCoordinate.x, self.avengerCoordinate.y), (tempSpoil.x, tempSpoil.y))
-            # Update check if enemyCoordinate is in tempPathToDest or not. If yes go to next loop, if no go to break
-            if(len(tempPathToDest) <= self.dangerArea + 3 and len(tempPathToDest) !=0 and self.isInCoordinateList(tempPathToDest, self.enemyCoordinate) != True):
-                break
-            else:
+            tempPathToDest = []
+            if tempSpoil.x >= self.mapCols or tempSpoil.y >= self.mapRows or self.mapMatrix[tempSpoil.y][tempSpoil.x] != 0:
                 continue
+            else:
+                tempPathToDest = self.astarFindPathWrapper(self.mapMatrix, (self.avengerCoordinate.x, self.avengerCoordinate.y), (tempSpoil.x, tempSpoil.y))
+                # Update check if enemyCoordinate is in tempPathToDest or not. If yes go to next loop, if no go to break
+                if(len(tempPathToDest) <= self.dangerArea + 3 and len(tempPathToDest) > 1 and self.isInCoordinateList(tempPathToDest, self.enemyCoordinate) != True):
+                    break
+                else:
+                    continue
 
         return tempPathToDest   
 
@@ -539,7 +567,10 @@ class Avenger:
                 fullDriverStep += self.moveDownRequest #self.moveDownRequest # Move Down
             else: 
                 pass
-        return fullDriverStep
+        if fullDriverStep == "":
+            return "x"
+        else:
+            return fullDriverStep
 
         #Description: Replace the last move step request by set bomb request
     def replaceLastMoveRequestByBomb(self, inputMultiMoveRequest):
@@ -574,7 +605,10 @@ class Avenger:
         
     #Description: emit an go Multiple Steps event to the server
     def goMultiSteps(self, inputMultiMoveRequest):
+        if inputMultiMoveRequest == '':
+            inputMultiMoveRequest = 'x'
         self.sio.emit('drive player', { 'direction': inputMultiMoveRequest})
+        print (inputMultiMoveRequest)
      
     #Description: Get list of all Woodden Walls in the map
     #[input] res: The respond of the Ticktack-player event  
